@@ -65,7 +65,7 @@ sub update_gf
 {
     my $now = localtime->epoch;
     
-    my $delete_period = 60;
+    my $delete_period = 300;
 
     # 古いキーを削除 
     foreach my $old_key (grep { $_ < $now - $delete_period } keys(%tweets)) {
