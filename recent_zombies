@@ -1,0 +1,80 @@
+#!/home/masa/perl5/perlbrew/perls/perl-5.16.1/bin/perl
+
+use strict;
+use warnings;
+
+use AnyEvent::Twitter::Stream;
+use Net::GrowthForecast;
+use Time::Piece;
+use List::MoreUtils qw(uniq);
+use Data::Dumper;
+
+require 'config.pl';
+our ($consumer_key, $consumer_secret, $token, $token_secret);
+
+my $gf = Net::GrowthForecast->new(host => 'localhost', port => 5125);
+my $done = AnyEvent->condvar;
+
+my $streamer = AnyEvent::Twitter::Stream->new(
+    consumer_key => $consumer_key,
+    consumer_secret => $consumer_secret,
+    token => $token,
+    token_secret => $token_secret,
+    method => 'userstream',
+    on_tweet => sub {
+        my $tweet = shift;
+        save_tweet($tweet);
+    },
+    on_error => sub {
+        my $error = shift;
+        warn "ERROR: $error";
+        $done->send;
+    },
+    on_eof => sub {
+        $done->send;
+    },
+);
+
+my $timer;
+$timer = AnyEvent->timer(
+    after => 0,
+    interval => 60,
+    cb => sub {
+        update_gf();
+    },
+);
+
+
+$done->recv;
+
+my %tweets;
+
+sub save_tweet
+{
+    my $tweet = shift;
+    return unless $tweet->{text};
+
+    my $ts = Time::Piece->strptime($tweet->{created_at}, "%a %b %d %H:%M:%S %z %Y");
+
+    $tweets{$ts->epoch}{$tweet->{user}{id}}++;
+}
+
+sub update_gf
+{
+    my $now = localtime->epoch;
+    
+    my $delete_period = 60;
+
+    # 古いキーを削除 
+    foreach my $old_key (grep { $_ < $now - $delete_period } keys(%tweets)) {
+        delete $tweets{$old_key};
+    }
+
+    #last60
+    my @last60_users = uniq( map { keys $tweets{$_} } grep { $now - 60 <= $_ } (keys %tweets));
+    $gf->post( 'twitter', 'recent_zombies', 'last60', scalar @last60_users);
+
+    #last300
+    my @last300_users = uniq( map { keys $tweets{$_} } grep { $now - 300 <= $_ } (keys %tweets));
+    $gf->post( 'twitter', 'recent_zombies', 'last300', scalar @last300_users);
+}
