@@ -13,39 +13,41 @@ require 'config.pl';
 our ($consumer_key, $consumer_secret, $token, $token_secret);
 
 my $gf = Net::GrowthForecast->new(host => 'localhost', port => 5125);
-my $done = AnyEvent->condvar;
 
-my $streamer = AnyEvent::Twitter::Stream->new(
-    consumer_key => $consumer_key,
-    consumer_secret => $consumer_secret,
-    token => $token,
-    token_secret => $token_secret,
-    method => 'userstream',
-    on_tweet => sub {
-        my $tweet = shift;
-        save_tweet($tweet);
-    },
-    on_error => sub {
-        my $error = shift;
-        warn "ERROR: $error";
-        $done->send;
-    },
-    on_eof => sub {
-        $done->send;
-    },
-);
+while(1) {
+    my $done = AnyEvent->condvar;
 
-my $timer;
-$timer = AnyEvent->timer(
-    after => 0,
-    interval => 60,
-    cb => sub {
-        update_gf();
-    },
-);
+    my $streamer = AnyEvent::Twitter::Stream->new(
+        consumer_key => $consumer_key,
+        consumer_secret => $consumer_secret,
+        token => $token,
+        token_secret => $token_secret,
+        method => 'userstream',
+        on_tweet => sub {
+            my $tweet = shift;
+            save_tweet($tweet);
+        },
+        on_error => sub {
+            my $error = shift;
+            warn "ERROR: $error";
+            $done->send;
+        },
+        on_eof => sub {
+            $done->send;
+        },
+    );
 
+    my $timer;
+    $timer = AnyEvent->timer(
+        after => 0,
+        interval => 60,
+        cb => sub {
+            update_gf();
+        },
+    );
 
-$done->recv;
+    $done->recv;
+}
 
 my %tweets;
 
