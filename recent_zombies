@@ -23,6 +23,7 @@ while(1) {
         token => $token,
         token_secret => $token_secret,
         method => 'userstream',
+        timeout => 45,
         on_tweet => sub {
             my $tweet = shift;
             save_tweet($tweet);
